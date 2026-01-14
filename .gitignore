@@ -9,7 +9,6 @@ obj/
 *.sln.docstates
 
 # secrets
-appsettings.Development.json
 appsettings.Production.json
 
 # logs
