@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using MongoDB.Driver;
 using MongoDB.Entities;
 using SearchService.Models;
+using SearchService.Services;
 
 namespace SearchService.Data;
 
@@ -23,22 +24,15 @@ public class DbInitializer
 
         var count = await db.CountAsync<Item>();
 
-        if (count == 0)
-        {
-            Console.WriteLine("Seeding initial data...");
-            var items = await File.ReadAllTextAsync("Data/auctions.json");
-            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            var itemsData = JsonSerializer.Deserialize<List<Item>>(items, options);
+        using var scope = app.Services.CreateScope();
 
-            if (itemsData != null && itemsData.Count > 0)
-            {
-                await db.SaveAsync(itemsData);
-                Console.WriteLine("Seeding completed.");
-            }
-            else
-            {
-                Console.WriteLine("No data found to seed.");
-            }
+        var auctionClient = scope.ServiceProvider.GetRequiredService<AuctionSvcHttpClient>();
+        var items = await auctionClient.GetItemsForSearchDb();
+
+        if (items is not null && items.Count > 0)
+        {
+            Console.WriteLine($"Seeding {items.Count} items into SearchDb...");
+            await db.SaveAsync(items);
         }
     }
 }
