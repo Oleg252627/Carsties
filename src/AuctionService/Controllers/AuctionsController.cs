@@ -3,6 +3,8 @@ using AuctionService.DTOs;
 using AuctionService.Entities;
 using AutoMapper;
 using AutoMapper.QueryableExtensions;
+using Contracts;
+using MassTransit;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,7 +12,7 @@ namespace AuctionService.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class AuctionsController(AuctionDbContext context, IMapper mapper) : ControllerBase
+public class AuctionsController(AuctionDbContext context, IMapper mapper, IPublishEndpoint publishEndpoint) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<List<AuctionDto>>> GetAuctions(string? date)
@@ -45,11 +47,14 @@ public class AuctionsController(AuctionDbContext context, IMapper mapper) : Cont
         auction.Seller = "test";
 
         context.Auctions.Add(auction);
+
+        var auctionDto = mapper.Map<AuctionDto>(auction);
+
+        await publishEndpoint.Publish(mapper.Map<AuctionCreated>(auctionDto));
+
         var result = await context.SaveChangesAsync() > 0;
 
         if (!result) return BadRequest("Failed to create auction");
-
-        var auctionDto = mapper.Map<AuctionDto>(auction);
 
         return CreatedAtAction(nameof(GetAuction), new { id = auction.Id }, auctionDto);
     }
@@ -67,6 +72,8 @@ public class AuctionsController(AuctionDbContext context, IMapper mapper) : Cont
         auction.Item.Color = dto.Color ?? auction.Item.Color;
         auction.Item.Mileage = dto.Mileage ?? auction.Item.Mileage;
 
+        await publishEndpoint.Publish(mapper.Map<AuctionUpdated>(auction));
+
         var result = await context.SaveChangesAsync() > 0;
 
         if (result) return Ok();
@@ -82,6 +89,8 @@ public class AuctionsController(AuctionDbContext context, IMapper mapper) : Cont
         if (auction is null) return NotFound();
 
         context.Auctions.Remove(auction);
+
+        await publishEndpoint.Publish(new AuctionDeleted { Id = auction.Id.ToString() });
         var result = await context.SaveChangesAsync() > 0;
 
         if (result) return Ok();

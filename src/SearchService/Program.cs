@@ -1,7 +1,9 @@
+using MassTransit;
 using MongoDB.Driver;
 using MongoDB.Entities;
 using Polly;
 using Polly.Extensions.Http;
+using SearchService.Consumers;
 using SearchService.Data;
 using SearchService.Services;
 
@@ -20,9 +22,35 @@ builder.Services.AddSingleton<MongoDB.Entities.DB>(sp =>
              .GetResult();
 });
 
+builder.Services.AddControllers();
+builder.Services.AddAutoMapper(AppDomain.CurrentDomain.GetAssemblies());
 builder.Services.AddHttpClient<AuctionSvcHttpClient>().AddPolicyHandler(GetPolicy());
 
-builder.Services.AddControllers();
+builder.Services.AddMassTransit(config =>
+{
+    config.AddConsumersFromNamespaceContaining<AuctionCreatedConsumer>();
+
+    config.SetEndpointNameFormatter(new KebabCaseEndpointNameFormatter("search", false));
+
+    config.UsingRabbitMq((ctx, cfg) =>
+    {
+        cfg.ReceiveEndpoint("search-auction-created", e =>
+        {
+            e.UseMessageRetry(r => r.Interval(5, TimeSpan.FromSeconds(5)));
+            e.ConfigureConsumer<AuctionCreatedConsumer>(ctx);
+        });
+
+        var rabbit = builder.Configuration.GetRequiredSection("RabbitMQ");
+
+        cfg.Host(rabbit["Host"] ?? "localhost", rabbit["VirtualHost"] ?? "/", h =>
+        {
+            h.Username(rabbit["Username"]!);
+            h.Password(rabbit["Password"]!);
+        });
+
+        cfg.ConfigureEndpoints(ctx);
+    });
+});
 
 var app = builder.Build();
 
