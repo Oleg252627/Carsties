@@ -12,7 +12,7 @@ public class AuctionCreatedConsumer(DB Db, IMapper mapper) : IConsumer<AuctionCr
     {
         Console.WriteLine("--> Consumer Auction created" + context.Message.Id);
         var item = mapper.Map<Item>(context.Message);
-        
+
         await Db.SaveAsync(item);
     }
 }
